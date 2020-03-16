@@ -1,13 +1,16 @@
 import multiprocessing
-import traceback
 import pickle
+import time
+import traceback
+
 import cv2
 import numpy as np
-import time
+
+from core import mplib
+from core.joblib import SubprocessGenerator, ThisThreadGenerator
 from facelib import LandmarksProcessor
-from samplelib import (SampleGeneratorBase, SampleHost, SampleProcessor,
+from samplelib import (SampleGeneratorBase, SampleLoader, SampleProcessor,
                        SampleType)
-from utils import iter_utils, mp_utils
 
 
 '''
@@ -24,51 +27,64 @@ class SampleGeneratorFace(SampleGeneratorBase):
                         output_sample_types=[],
                         add_sample_idx=False,
                         generators_count=4,
+                        raise_on_no_data=True,
                         **kwargs):
 
-        super().__init__(samples_path, debug, batch_size)
+        super().__init__(debug, batch_size)
         self.sample_process_options = sample_process_options
         self.output_sample_types = output_sample_types
         self.add_sample_idx = add_sample_idx
-
+        
         if self.debug:
             self.generators_count = 1
         else:
-            self.generators_count = np.clip(multiprocessing.cpu_count(), 2, generators_count)
-            
-        samples = SampleHost.load (SampleType.FACE, self.samples_path)
+            self.generators_count = max(1, generators_count)
+
+        samples = SampleLoader.load (SampleType.FACE, samples_path)
         self.samples_len = len(samples)
 
+        self.initialized = False
         if self.samples_len == 0:
-            raise ValueError('No training data provided.')
+            if raise_on_no_data:
+                raise ValueError('No training data provided.')
+            else:
+                return
 
-        index_host = mp_utils.IndexHost(self.samples_len)
+        index_host = mplib.IndexHost(self.samples_len)
 
         if random_ct_samples_path is not None:
-            ct_samples = SampleHost.load (SampleType.FACE, random_ct_samples_path)
-            ct_index_host = mp_utils.IndexHost( len(ct_samples) )
+            ct_samples = SampleLoader.load (SampleType.FACE, random_ct_samples_path)
+            ct_index_host = mplib.IndexHost( len(ct_samples) )
         else:
             ct_samples = None
             ct_index_host = None
 
         pickled_samples = pickle.dumps(samples, 4)
         ct_pickled_samples = pickle.dumps(ct_samples, 4) if ct_samples is not None else None
-        
+
         if self.debug:
-            self.generators = [iter_utils.ThisThreadGenerator ( self.batch_func, (pickled_samples, index_host.create_cli(), ct_pickled_samples, ct_index_host.create_cli() if ct_index_host is not None else None) )]
+            self.generators = [ThisThreadGenerator ( self.batch_func, (pickled_samples, index_host.create_cli(), ct_pickled_samples, ct_index_host.create_cli() if ct_index_host is not None else None) )]
         else:
-            self.generators = [iter_utils.SubprocessGenerator ( self.batch_func, (pickled_samples, index_host.create_cli(), ct_pickled_samples, ct_index_host.create_cli() if ct_index_host is not None else None), start_now=True ) for i in range(self.generators_count) ]
+            self.generators = [SubprocessGenerator ( self.batch_func, (pickled_samples, index_host.create_cli(), ct_pickled_samples, ct_index_host.create_cli() if ct_index_host is not None else None), start_now=False ) \
+                               for i in range(self.generators_count) ]
+                               
+            SubprocessGenerator.start_in_parallel( self.generators )
 
         self.generator_counter = -1
-
+        
+        self.initialized = True
+        
     #overridable
-    def get_total_sample_count(self):
-        return self.samples_len
-
+    def is_initialized(self):
+        return self.initialized
+        
     def __iter__(self):
         return self
 
     def __next__(self):
+        if not self.initialized:
+            return []
+            
         self.generator_counter += 1
         generator = self.generators[self.generator_counter % len(self.generators) ]
         return next(generator)
@@ -76,7 +92,7 @@ class SampleGeneratorFace(SampleGeneratorBase):
     def batch_func(self, param ):
         pickled_samples, index_host, ct_pickled_samples, ct_index_host = param
         
-        samples = pickle.loads(pickled_samples)      
+        samples = pickle.loads(pickled_samples)
         ct_samples = pickle.loads(ct_pickled_samples) if ct_pickled_samples is not None else None
 
         bs = self.batch_size
@@ -89,9 +105,9 @@ class SampleGeneratorFace(SampleGeneratorBase):
             t = time.time()
             for n_batch in range(bs):
                 sample_idx = indexes[n_batch]
-                sample = samples[sample_idx]  
-                              
-                ct_sample = None        
+                sample = samples[sample_idx]
+
+                ct_sample = None
                 if ct_samples is not None:
                     ct_sample = ct_samples[ct_indexes[n_batch]]
 

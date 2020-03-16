@@ -4,10 +4,10 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from utils.cv2_utils import *
+from core.cv2ex import *
 from DFLIMG import *
 from facelib import LandmarksProcessor
-from imagelib import IEPolys
+from core.imagelib import IEPolys
 
 class SampleType(IntEnum):
     IMAGE = 0 #raw image
@@ -27,11 +27,12 @@ class Sample(object):
                  'shape',
                  'landmarks',
                  'ie_polys',
+                 'seg_ie_polys',
                  'eyebrows_expand_mod',
                  'source_filename',
                  'person_name',
                  'pitch_yaw_roll',
-                 '_filename_offset_size',                 
+                 '_filename_offset_size',
                 ]
 
     def __init__(self, sample_type=None,
@@ -39,10 +40,11 @@ class Sample(object):
                        face_type=None,
                        shape=None,
                        landmarks=None,
-                       ie_polys=None,                       
+                       ie_polys=None,
+                       seg_ie_polys=None,
                        eyebrows_expand_mod=None,
                        source_filename=None,
-                       person_name=None,                       
+                       person_name=None,
                        pitch_yaw_roll=None,
                        **kwargs):
 
@@ -52,18 +54,19 @@ class Sample(object):
         self.shape = shape
         self.landmarks = np.array(landmarks) if landmarks is not None else None
         self.ie_polys = IEPolys.load(ie_polys)
+        self.seg_ie_polys = IEPolys.load(seg_ie_polys)
         self.eyebrows_expand_mod = eyebrows_expand_mod
         self.source_filename = source_filename
         self.person_name = person_name
-        self.pitch_yaw_roll = pitch_yaw_roll 
-        
+        self.pitch_yaw_roll = pitch_yaw_roll
+
         self._filename_offset_size = None
- 
+
     def get_pitch_yaw_roll(self):
         if self.pitch_yaw_roll is None:
-            self.pitch_yaw_roll = LandmarksProcessor.estimate_pitch_yaw_roll(landmarks)
+            self.pitch_yaw_roll = LandmarksProcessor.estimate_pitch_yaw_roll(landmarks, size=self.shape[1])
         return self.pitch_yaw_roll
-        
+
     def set_filename_offset_size(self, filename, offset, size):
         self._filename_offset_size = (filename, offset, size)
 
@@ -88,6 +91,7 @@ class Sample(object):
                 'shape': self.shape,
                 'landmarks': self.landmarks.tolist(),
                 'ie_polys': self.ie_polys.dump(),
+                'seg_ie_polys': self.seg_ie_polys.dump(),
                 'eyebrows_expand_mod': self.eyebrows_expand_mod,
                 'source_filename': self.source_filename,
                 'person_name': self.person_name
