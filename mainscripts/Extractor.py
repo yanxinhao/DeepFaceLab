@@ -765,16 +765,22 @@ def main(input_dir,
     if images_found != 0:
         if detector == 'manual':
             io.log_info ('Performing manual extract...')
-            data = ExtractSubprocessor ([ ExtractSubprocessor.Data(filename, manual=True) for filename in input_path_image_paths ], 'landmarks', image_size, face_type, debug_dir, cpu_only=cpu_only, manual=True, manual_window_size=manual_window_size).run()
+            data = ExtractSubprocessor ([ ExtractSubprocessor.Data(filename, manual=True) for \
+                filename in input_path_image_paths ], 'landmarks', image_size, face_type, debug_dir, \
+                cpu_only=cpu_only, manual=True, manual_window_size=manual_window_size).run()
         else:
             io.log_info ('Performing 1st pass...')
-            data = ExtractSubprocessor ([ ExtractSubprocessor.Data(filename) for filename in input_path_image_paths ], 'rects-'+detector, image_size, face_type, debug_dir, multi_gpu=multi_gpu, cpu_only=cpu_only, manual=False, max_faces_from_image=max_faces_from_image).run()
+            data = ExtractSubprocessor ([ ExtractSubprocessor.Data(filename) for filename in input_path_image_paths ],\
+                'rects-'+detector, image_size, face_type, debug_dir,multi_gpu=multi_gpu, cpu_only=cpu_only,\
+                manual=False, max_faces_from_image=max_faces_from_image).run()
 
             io.log_info ('Performing 2nd pass...')
-            data = ExtractSubprocessor (data, 'landmarks', image_size, face_type, debug_dir, multi_gpu=multi_gpu, cpu_only=cpu_only, manual=False).run()
+            data = ExtractSubprocessor (data, 'landmarks', image_size, face_type, debug_dir, \
+                multi_gpu=multi_gpu, cpu_only=cpu_only, manual=False).run()
 
         io.log_info ('Performing 3rd pass...')
-        data = ExtractSubprocessor (data, 'final', image_size, face_type, debug_dir, multi_gpu=multi_gpu, cpu_only=cpu_only, manual=False, final_output_path=output_path).run()
+        data = ExtractSubprocessor (data, 'final', image_size, face_type, debug_dir, \
+            multi_gpu=multi_gpu, cpu_only=cpu_only, manual=False, final_output_path=output_path).run()
         faces_detected += sum([d.faces_detected for d in data])
 
         if manual_fix:
